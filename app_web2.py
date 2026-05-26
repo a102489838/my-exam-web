@@ -22,11 +22,8 @@ st.set_page_config(page_title="内部题库练习系统", layout="wide")
 # 新增模块：浏览器 Cookie 存储管理器
 # 说明：用于静默读取和保存用户的做题进度到当前设备，关闭网页不丢失
 # ==========================================
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
-
-cookie_manager = get_cookie_manager()
+# 去除了 @st.cache_resource 缓存拦截，直接实例化并赋予固定 key，确保每次刷新都能正常读取本地数据
+cookie_manager = stx.CookieManager(key="exam_cookies")
 
 # ==========================================
 # 数据加载模块区域 (利用缓存提速)
