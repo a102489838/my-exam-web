@@ -169,7 +169,7 @@ if total_questions > 0:
                 st.markdown(highlight_html, unsafe_allow_html=True)
             else:
                 st.markdown(
-                    f"<div style='margin-bottom: 8px; padding-left: 15px; font-size: 1.1em;'>{opt}. {opt_val}</div>",
+                    f"<div style='margin-bottom: 6px; padding-left: 10px;'>{opt}. {opt_val}</div>",
                     unsafe_allow_html=True)
 
     # --- 常规选择题处理逻辑 ---
@@ -180,7 +180,7 @@ if total_questions > 0:
                 # 如果选项包含在答案串中，渲染为高亮绿色边框框
                 if opt in correct_answers_str:
                     highlight_html = f"""
-                    <div style="background-color: #e8f5e9; color: #1b5e20; padding: 10px; border-radius: 5px; margin-bottom: 8px; font-weight: bold; border-left: 5px solid #4caf50;">
+                    <div style="background-color: #e8f5e9; color: #1b5e20; padding: 6px; border-radius: 5px; margin-bottom: 5px; font-weight: bold; border-left: 4px solid #4caf50;">
                         {opt}. {opt_val} ✔️
                     </div>
                     """
