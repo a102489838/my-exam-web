@@ -52,7 +52,17 @@ if app_mode == "📖 刷题模式":
     
     # 1. 动态获取所有不重复的题型组合
     all_types = ["全部题型"] + list(df['题型'].unique())
-    selected_type = st.sidebar.selectbox("🎯 选择刷题题型", all_types)
+    
+    # --- 新增：尝试从 URL 参数中读取上次退出的题型 ---
+    default_type_index = 0
+    if "q_type" in st.query_params:
+        url_type = st.query_params["q_type"]
+        # 确保读取到的题型确实在我们的题库列表中
+        if url_type in all_types:
+            default_type_index = all_types.index(url_type)
+
+    # 将选择框的默认值（index）绑定为我们刚刚读取到的历史题型
+    selected_type = st.sidebar.selectbox("🎯 选择刷题题型", all_types, index=default_type_index)
 
     # 2. 初始化并监控题型切换状态（防崩溃机制）
     if 'last_selected_type' not in st.session_state:
@@ -208,10 +218,11 @@ if app_mode == "📖 刷题模式":
     with col2:
         st.button("⬇️ 下一题 ⬇️", use_container_width=True, on_click=go_brush_next)
 
-    # ------------------------------------------
-    # 持久化核心：将最新进度实时静默写入 URL 栏
+# ------------------------------------------
+    # 持久化核心：将最新进度和【当前题型】实时静默写入 URL 栏
     # ------------------------------------------
     st.query_params["q_idx"] = str(st.session_state.current_index)
+    st.query_params["q_type"] = st.session_state.last_selected_type
 
 
 # ==============================================================================
