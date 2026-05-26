@@ -209,7 +209,7 @@ st.write("---")
 col1, col2 = st.columns(2)
 
 with col1:
-    if st.button("⬆️ 上一题", use_container_width=True):
+    if st.button("⬆️ 上一题 ⬆️", use_container_width=True):
         if st.session_state.current_index > 0:
             st.session_state.current_index -= 1
             # 智能收缩联动：退回上一个 50 题区间时，侧边栏下拉框跟着同步翻页
@@ -219,7 +219,7 @@ with col1:
             st.toast("⚠️ 这已经是当前题型的第一题啦！")
 
 with col2:
-    if st.button("下一题 ⬇️", use_container_width=True):
+    if st.button("⬇️ 下一题 ⬇️", use_container_width=True):
         if st.session_state.current_index < total_questions - 1:
             st.session_state.current_index += 1
             # 智能递增联动：前进到下一个 50 题区间时，侧边栏下拉框跟着同步翻页
