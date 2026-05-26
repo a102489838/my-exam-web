@@ -367,10 +367,12 @@ elif app_mode == "📝 自我检测 (100题)":
                             is_current = (real_idx == st.session_state.exam_idx)
                             b_type = "primary" if is_current else "secondary"
 
-                            if cols[j].button(btn_label, key=f"exam_btn_{real_idx}", type=b_type,
-                                              use_container_width=True):
-                                st.session_state.exam_idx = real_idx
-                                st.rerun()
+                            # 定义回调函数：点击时直接在内存中修改题号，避免 st.rerun() 的双重运行
+                            def jump_to_q(target_idx):
+                                st.session_state.exam_idx = target_idx
+
+                            # 将回调函数绑定到按钮上
+                            cols[j].button(btn_label, key=f"exam_btn_{real_idx}", type=b_type, use_container_width=True, on_click=jump_to_q, args=(real_idx,))
 
         # ------------------------------------------
         # 主界面：题干与选项渲染
@@ -446,17 +448,22 @@ elif app_mode == "📝 自我检测 (100题)":
         # ------------------------------------------
         col1, col2, col3 = st.columns([1, 1, 1])
 
+        # 定义回调函数
+        def go_prev():
+            if st.session_state.exam_idx > 0:
+                st.session_state.exam_idx -= 1
+
+        def go_next():
+            if st.session_state.exam_idx < total_exam_q - 1:
+                st.session_state.exam_idx += 1
+
         with col1:
-            if st.button("⬅️ 上一题", use_container_width=True):
-                if curr_idx > 0:
-                    st.session_state.exam_idx -= 1
-                    st.rerun()
+            # 绑定回调函数
+            st.button("⬅️ 上一题", use_container_width=True, on_click=go_prev)
 
         with col2:
-            if st.button("下一题 ➡️", use_container_width=True):
-                if curr_idx < total_exam_q - 1:
-                    st.session_state.exam_idx += 1
-                    st.rerun()
+            # 绑定回调函数
+            st.button("下一题 ➡️", use_container_width=True, on_click=go_next)
 
         with col3:
             if st.session_state.exam_state == 'testing':
