@@ -1,12 +1,12 @@
 # ==========================================
 # 导入相关库模块区域
+# 说明：引入 Web 核心库、数据处理库以及数学、随机计算库
 # ==========================================
 import streamlit as st
 import pandas as pd
 import os
 import math
 import random
-import extra_streamlit_components as stx  # 新增：用于操作浏览器底层的 Cookie
 
 # ------------------------------------------
 # 自定义区域：基础配置与参数
@@ -14,16 +14,9 @@ import extra_streamlit_components as stx  # 新增：用于操作浏览器底层
 FILE_PATH = '完整题库_精排版.xlsx'  # Excel 题库文件路径
 NAV_PER_PAGE = 50  # 刷题模式下，侧边栏一次展示的序号按钮数量
 
-# 设置网页的浏览器标签页标题和布局模式（wide 为宽屏模式，两侧利用率更高）
-# 注意：这行代码必须是 Streamlit 的第一个命令
+# 设置网页的浏览器标签页标题和布局模式（wide 为宽屏模式）
 st.set_page_config(page_title="内部题库练习系统", layout="wide")
 
-# ==========================================
-# 新增模块：浏览器 Cookie 存储管理器
-# 说明：用于静默读取和保存用户的做题进度到当前设备，关闭网页不丢失
-# ==========================================
-# 去除了 @st.cache_resource 缓存拦截，直接实例化并赋予固定 key，确保每次刷新都能正常读取本地数据
-cookie_manager = stx.CookieManager(key="exam_cookies")
 
 # ==========================================
 # 数据加载模块区域 (利用缓存提速)
@@ -35,7 +28,6 @@ def load_exam_data(path):
         return pd.read_excel(path).fillna("")
     return None
 
-
 # 载入原始完整数据集
 df = load_exam_data(FILE_PATH)
 
@@ -44,6 +36,7 @@ if df is None:
     st.error(f"❌ 找不到题库文件：{FILE_PATH}。请检查文件是否存在，或是否与本程序在同一目录下。")
     st.stop()
 
+
 # ==========================================
 # 侧边栏：全局双模式切换控制区
 # ==========================================
@@ -51,11 +44,12 @@ st.sidebar.title("⚙️ 功能导航")
 app_mode = st.sidebar.radio("请选择当前模式：", ["📖 刷题模式", "📝 自我检测 (100题)"])
 st.sidebar.write("---")
 
+
 # ==============================================================================
 # 第一大模块：【📖 刷题模式】专属逻辑区域
 # ==============================================================================
 if app_mode == "📖 刷题模式":
-
+    
     # 1. 动态获取所有不重复的题型组合
     all_types = ["全部题型"] + list(df['题型'].unique())
     selected_type = st.sidebar.selectbox("🎯 选择刷题题型", all_types)
@@ -64,7 +58,7 @@ if app_mode == "📖 刷题模式":
     if 'last_selected_type' not in st.session_state:
         st.session_state.last_selected_type = selected_type
 
-    # 检测到切换题型，重置做题进度
+    # 检测到切换题型，做题进度索引归零
     if st.session_state.last_selected_type != selected_type:
         st.session_state.current_index = 0
         st.session_state.nav_page = 0
@@ -80,26 +74,21 @@ if app_mode == "📖 刷题模式":
     total_nav_pages = math.ceil(total_questions / NAV_PER_PAGE)
 
     # ------------------------------------------
-    # 模块区域：进度初始化与读取
+    # 核心持久化控制：从官方原生的 URL 参数中读取历史进度
     # ------------------------------------------
     if 'current_index' not in st.session_state:
-        # 1. 尝试从当前设备的浏览器 Cookie 中读取名为 "saved_q_idx" 的历史记录
-        saved_idx = cookie_manager.get(cookie="saved_q_idx")
-        
-        # 2. 如果找到了历史记录，并且是纯数字，就恢复这个进度
-        if saved_idx is not None and str(saved_idx).isdigit():
-            st.session_state.current_index = int(saved_idx)
+        if "q_idx" in st.query_params:
+            try:
+                st.session_state.current_index = int(st.query_params["q_idx"])
+            except ValueError:
+                st.session_state.current_index = 0
         else:
-            # 否则（第一次用这个设备），默认从第 1 题开始
             st.session_state.current_index = 0
             
     if 'nav_page' not in st.session_state:
-        # 根据读取到的进度题号，自动计算并跳转到对应的左侧答题卡页码区间
         st.session_state.nav_page = st.session_state.current_index // NAV_PER_PAGE
 
-    # 安全兜底防御机制：
-    # 如果用户上次在“全部题型”做到了第80题，这次打开网页后切换到了只有20道题的“判断题”
-    # 会导致读取的题号严重越界报错。此处强行拦截，如果越界则进度归零。
+    # 安全拦截防御机制：防止因切换题型导致读取的旧进度数超出当前新题库范围而崩溃
     if st.session_state.current_index >= total_questions and total_questions > 0:
         st.session_state.current_index = 0
         st.session_state.nav_page = 0
@@ -107,12 +96,10 @@ if app_mode == "📖 刷题模式":
     # 4. 侧边栏：题号导航网格 (常规刷题答题卡)
     st.sidebar.header("🗂️ 题号导航 (点击跳转)")
     if total_nav_pages > 0:
-        nav_options = [f"第 {i * NAV_PER_PAGE + 1} - {min((i + 1) * NAV_PER_PAGE, total_questions)} 题" for i in
-                       range(total_nav_pages)]
-        # 防止越界
+        nav_options = [f"第 {i * NAV_PER_PAGE + 1} - {min((i + 1) * NAV_PER_PAGE, total_questions)} 题" for i in range(total_nav_pages)]
         if st.session_state.nav_page >= len(nav_options):
             st.session_state.nav_page = 0
-
+            
         selected_nav = st.sidebar.selectbox("选择题号区间", nav_options, index=st.session_state.nav_page)
         st.session_state.nav_page = nav_options.index(selected_nav)
     else:
@@ -123,8 +110,13 @@ if app_mode == "📖 刷题模式":
     start_q = st.session_state.nav_page * NAV_PER_PAGE
     end_q = min(start_q + NAV_PER_PAGE, total_questions)
 
-    # 渲染侧边栏跳转按钮
+    # 5. 渲染侧边栏跳转按钮方块
     cols_per_row = 5
+    
+    # 性能优化：定义点击切换题号的回调函数，杜绝双重渲染卡顿
+    def jump_to_brush_q(target_idx):
+        st.session_state.current_index = target_idx
+
     for i in range(start_q, end_q, cols_per_row):
         cols = st.sidebar.columns(cols_per_row)
         for j in range(cols_per_row):
@@ -132,19 +124,17 @@ if app_mode == "📖 刷题模式":
                 q_idx = i + j
                 is_current = (q_idx == st.session_state.current_index)
                 btn_type = "primary" if is_current else "secondary"
-                if cols[j].button(str(q_idx + 1), key=f"btn_{q_idx}", type=btn_type, use_container_width=True):
-                    st.session_state.current_index = q_idx
-                    st.rerun()
+                # 绑定回调函数处理
+                cols[j].button(str(q_idx + 1), key=f"btn_{q_idx}", type=btn_type, use_container_width=True, on_click=jump_to_brush_q, args=(q_idx,))
 
-    # 5. 主界面渲染区域
+    # 6. 主界面题目内容展现区域
     if total_questions > 0:
         row = filtered_df.iloc[st.session_state.current_index]
-
+        
         # 顶部状态栏
-        st.info(
-            f"📋 当前题型：【{selected_type}】 | 进度: {st.session_state.current_index + 1} / {total_questions}  |  本题实际类型: {row.get('题型', '未知')}")
+        st.info(f"📋 当前题型：【{selected_type}】 | 进度: {st.session_state.current_index + 1} / {total_questions}  |  本题实际类型: {row.get('题型', '未知')}")
 
-        # 渲染题干
+        # 精细化排版渲染题干
         question_html = f"""
         <div style='font-size: 1.05em; line-height: 1.6; margin-bottom: 15px;'>
             <b>{st.session_state.current_index + 1}.</b> {row.get('题目内容', '')}
@@ -155,10 +145,9 @@ if app_mode == "📖 刷题模式":
         correct_answers_str = str(row.get('正确答案', ''))
         q_type = str(row.get('题型', ''))
 
-        # --- 刷题模式：判断题特殊处理 ---
+        # --- 刷题模式：判断题高亮逻辑 ---
         if "判断" in q_type:
             options_dict = {'A': '正确', 'B': '错误'}
-            # 映射正确答案
             if correct_answers_str == '1':
                 mapped_correct = 'A'
             elif correct_answers_str in ['2', '0']:
@@ -168,7 +157,6 @@ if app_mode == "📖 刷题模式":
 
             for opt, opt_val in options_dict.items():
                 if opt in mapped_correct:
-                    # 命中正确答案：带勾选的绿色高亮框
                     highlight_html = f"""
                     <div style="background-color: #e8f5e9; color: #1b5e20; padding: 8px 12px; border-radius: 5px; margin-bottom: 15px; font-weight: bold; border-left: 4px solid #4caf50; font-size: 0.95em; line-height: 1.5;">
                         {opt}. {opt_val} ✔️
@@ -176,12 +164,9 @@ if app_mode == "📖 刷题模式":
                     """
                     st.markdown(highlight_html, unsafe_allow_html=True)
                 else:
-                    # 错误选项：普通文本
-                    st.markdown(
-                        f"<div style='margin-bottom: 15px; padding-left: 15px; font-size: 0.95em; line-height: 1.5;'>{opt}. {opt_val}</div>",
-                        unsafe_allow_html=True)
-
-        # --- 刷题模式：常规题处理 ---
+                    st.markdown(f"<div style='margin-bottom: 15px; padding-left: 15px; font-size: 0.95em; line-height: 1.5;'>{opt}. {opt_val}</div>", unsafe_allow_html=True)
+        
+        # --- 刷题模式：常规选择题高亮逻辑 ---
         else:
             for opt in ['A', 'B', 'C', 'D', 'E', 'F']:
                 opt_val = row.get(f'选项{opt}', '')
@@ -194,12 +179,10 @@ if app_mode == "📖 刷题模式":
                         """
                         st.markdown(highlight_html, unsafe_allow_html=True)
                     else:
-                        st.markdown(
-                            f"<div style='margin-bottom: 15px; padding-left: 15px; font-size: 0.95em; line-height: 1.5;'>{opt}. {opt_val}</div>",
-                            unsafe_allow_html=True)
+                        st.markdown(f"<div style='margin-bottom: 15px; padding-left: 15px; font-size: 0.95em; line-height: 1.5;'>{opt}. {opt_val}</div>", unsafe_allow_html=True)
 
         st.write("")
-        # 渲染解析
+        # 渲染解析说明
         remark = row.get('解析', '')
         if remark and remark != "无":
             st.caption(f"**💡 解析说明：** {remark}")
@@ -208,73 +191,62 @@ if app_mode == "📖 刷题模式":
 
     st.write("---")
 
-    # 6. 底部上一题/下一题控制
+    # 7. 底部控制翻页按钮（回调函数优化版，极大缓解卡顿）
+    def go_brush_prev():
+        if st.session_state.current_index > 0:
+            st.session_state.current_index -= 1
+            st.session_state.nav_page = st.session_state.current_index // NAV_PER_PAGE
+
+    def go_brush_next():
+        if st.session_state.current_index < total_questions - 1:
+            st.session_state.current_index += 1
+            st.session_state.nav_page = st.session_state.current_index // NAV_PER_PAGE
+
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("⬆️ 上一题 ⬆️", use_container_width=True):
-            if st.session_state.current_index > 0:
-                st.session_state.current_index -= 1
-                st.session_state.nav_page = st.session_state.current_index // NAV_PER_PAGE
-                st.rerun()
-            else:
-                st.toast("⚠️ 这已经是当前题型的第一题啦！")
+        st.button("⬆️ 上一题 ⬆️", use_container_width=True, on_click=go_brush_prev)
     with col2:
-        if st.button("⬇️ 下一题 ⬇️", use_container_width=True):
-            if st.session_state.current_index < total_questions - 1:
-                st.session_state.current_index += 1
-                st.session_state.nav_page = st.session_state.current_index // NAV_PER_PAGE
-                st.rerun()
-            else:
-                st.toast("🎉 恭喜你，已经是当前题型的最后一题啦！")
-                
-    # ==========================================
-    # 新增模块：进度静默自动保存机制
-    # 说明：对比当前网页上的进度与 Cookie 中的进度，若不同则自动更新写入本地设备
-    # ==========================================
-    # 获取当前储存在浏览器里的题号
-    current_cookie_idx = cookie_manager.get(cookie="saved_q_idx")
-    
-    # 只要发现你点击了上下题按钮、或者点了左侧答题卡导致题号发生了变化
-    if str(current_cookie_idx) != str(st.session_state.current_index):
-        # max_age=31536000 代表将这个进度在本地设备中强制保留 1 年（以秒为单位）
-        cookie_manager.set("saved_q_idx", str(st.session_state.current_index), max_age=31536000)
+        st.button("⬇️ 下一题 ⬇️", use_container_width=True, on_click=go_brush_next)
+
+    # ------------------------------------------
+    # 持久化核心：将最新进度实时静默写入 URL 栏
+    # ------------------------------------------
+    st.query_params["q_idx"] = str(st.session_state.current_index)
+
 
 # ==============================================================================
 # 第二大模块：【📝 自我检测】专属逻辑区域
 # ==============================================================================
 elif app_mode == "📝 自我检测 (100题)":
 
-    # 1. 考试状态机初始化
+    # 1. 考试专属状态机初始化
     if 'exam_state' not in st.session_state:
-        st.session_state.exam_state = 'not_started'  # 状态: not_started(未开始), testing(考试中), finished(已交卷)
-        st.session_state.exam_df = None  # 存放本次抽取的 100 道试题
-        st.session_state.exam_answers = {}  # 存放用户的作答记录 {题号: "A,B"}
-        st.session_state.exam_idx = 0  # 当前考题索引
-        st.session_state.exam_score = 0  # 最终得分
-        st.session_state.show_result_popup = False  # 成绩单弹窗触发器
-
+        st.session_state.exam_state = 'not_started' 
+        st.session_state.exam_df = None             
+        st.session_state.exam_answers = {}          
+        st.session_state.exam_idx = 0               
+        st.session_state.exam_score = 0             
+        st.session_state.show_result_popup = False  
 
     # ==========================================
-    # 弹窗定义区域
+    # 考试模式专门：弹窗函数定义区域
     # ==========================================
-    # 弹窗 A：正式成绩单
+    # 弹窗 A：结算成绩单
     @st.dialog("📊 考试成绩单")
     def show_result_dialog(score, total):
         st.markdown(f"<h1 style='text-align: center; color: #d32f2f;'>{score} 分</h1>", unsafe_allow_html=True)
         st.write(f"**考试详情**：共计 {total} 题，您答对了 **{score}** 题。")
-        if score >= total * 0.6:
+        if score >= total * 0.6:  
             st.success("🎉 太棒了！成绩非常理想！")
-            st.balloons()  # 触发气球特效
+            st.balloons()  
         else:
             st.warning("💪 还要继续努力哦！错题已在左侧答题卡中标记为 🔴。")
-
+        
         if st.button("立即去复盘错题", use_container_width=True):
-            st.session_state.show_result_popup = False
-            st.rerun()
+            st.session_state.show_result_popup = False 
+            st.rerun()  
 
-            # 弹窗 B：防误触交卷拦截
-
-
+    # 弹窗 B：未做完拦截警告弹窗
     @st.dialog("⚠️ 确认交卷")
     def confirm_submit_dialog(unanswered_count, total_q):
         st.warning(f"您还有 **{unanswered_count}** 道题未作答！")
@@ -282,98 +254,91 @@ elif app_mode == "📝 自我检测 (100题)":
         c1, c2 = st.columns(2)
         with c1:
             if st.button("继续答题", use_container_width=True):
-                st.rerun()
+                st.rerun() 
         with c2:
             if st.button("确认交卷", type="primary", use_container_width=True):
-                # 强制判分逻辑
                 score = 0
                 for i in range(total_q):
                     user_ans = st.session_state.exam_answers.get(i, "")
                     real_ans = st.session_state.exam_df.iloc[i]['统一正确答案']
                     if user_ans == real_ans:
                         score += 1
-
+                
                 st.session_state.exam_score = score
                 st.session_state.exam_state = 'finished'
-                st.session_state.exam_idx = 0
-                st.session_state.show_result_popup = True
+                st.session_state.exam_idx = 0 
+                st.session_state.show_result_popup = True 
                 st.rerun()
 
-
-    # 监听器：触发成绩单展示
+    # 监控触发器：检测是否展示成绩单
     if st.session_state.show_result_popup:
         show_result_dialog(st.session_state.exam_score, len(st.session_state.exam_df))
 
     # ==========================================
-    # 考试流程控制区
+    # 考试核心流程推进控制区
     # ==========================================
     st.title("📝 模拟自我检测")
 
-    # --- 状态 A：未开始（生成试卷界面） ---
+    # --- 状态 A：未开始（抽取生成考卷） ---
     if st.session_state.exam_state == 'not_started':
         st.info("规则说明：系统将随机抽取 **单选50题 + 判断20题 + 多选30题**，共计100题。每题1分，满分100分。")
         if st.button("🚀 立即生成试卷并开始考试", type="primary"):
-
-            # 智能抽题算法（带有防崩溃 min() 控制）
-            single_df = df[df['题型'].str.contains('单选')].sample(n=min(50, len(df[df['题型'].str.contains('单选')])),
-                                                                   random_state=random.randint(1, 1000))
-            tf_df = df[df['题型'].str.contains('判断')].sample(n=min(20, len(df[df['题型'].str.contains('判断')])),
-                                                               random_state=random.randint(1, 1000))
-            multi_df = df[df['题型'].str.contains('多选')].sample(n=min(30, len(df[df['题型'].str.contains('多选')])),
-                                                                  random_state=random.randint(1, 1000))
-
-            # 拼接试卷
+            
+            # 按配比高效率随机抽样题目
+            single_df = df[df['题型'].str.contains('单选')].sample(n=min(50, len(df[df['题型'].str.contains('单选')])), random_state=random.randint(1,1000))
+            tf_df = df[df['题型'].str.contains('判断')].sample(n=min(20, len(df[df['题型'].str.contains('判断')])), random_state=random.randint(1,1000))
+            multi_df = df[df['题型'].str.contains('多选')].sample(n=min(30, len(df[df['题型'].str.contains('多选')])), random_state=random.randint(1,1000))
+            
+            # 整合考卷数据
             final_exam_df = pd.concat([single_df, tf_df, multi_df]).reset_index(drop=True)
-
-
-            # 提前将判断题的后台代号映射为规范的 A/B
+            
+            # 数据规范预映射
             def map_answer(row):
                 if "判断" in str(row['题型']):
                     ans = str(row['正确答案'])
-                    if ans == '1':
-                        return 'A'
-                    elif ans in ['2', '0']:
-                        return 'B'
+                    if ans == '1': return 'A'
+                    elif ans in ['2', '0']: return 'B'
                     return ans
                 return str(row['正确答案'])
-
-
+                
             final_exam_df['统一正确答案'] = final_exam_df.apply(map_answer, axis=1)
-
-            # 更新进入考试状态
+            
             st.session_state.exam_df = final_exam_df
             st.session_state.exam_answers = {}
             st.session_state.exam_idx = 0
             st.session_state.exam_state = 'testing'
             st.rerun()
 
-    # --- 状态 B：考试进行中 / 交卷后复盘 ---
+    # --- 状态 B：答题阶段与交卷回顾阶段 ---
     elif st.session_state.exam_state in ['testing', 'finished']:
         exam_df = st.session_state.exam_df
         total_exam_q = len(exam_df)
         curr_idx = st.session_state.exam_idx
         row = exam_df.iloc[curr_idx]
         q_type = str(row.get('题型', '未知'))
-
-        # 顶部导航进度与状态提示
+        
+        # 头部提示栏
         if st.session_state.exam_state == 'testing':
             st.warning(f"⏳ **考试中** | 当前进度：{curr_idx + 1} / {total_exam_q} | 题型：{q_type}")
         else:
-            st.success(
-                f"✅ **已交卷** | 最终得分：**{st.session_state.exam_score}** / {total_exam_q} 分 | 当前复盘：第 {curr_idx + 1} 题")
-
+            st.success(f"✅ **已交卷** | 最终得分：**{st.session_state.exam_score}** / {total_exam_q} 分 | 当前复盘：第 {curr_idx + 1} 题")
+        
         st.progress((curr_idx + 1) / total_exam_q)
-
+        
         # ------------------------------------------
-        # 侧边栏：机考专属全局智能答题卡 (带红绿灯状态)
+        # 侧边栏：考试专属分类数字矩阵答题卡
         # ------------------------------------------
         st.sidebar.write("---")
         st.sidebar.header("📋 考试答题卡")
+        
+        # 定义点击跳转答题卡题号的回调函数
+        def jump_to_exam_q(target_idx):
+            st.session_state.exam_idx = target_idx
 
         types_order = ['单选', '判断', '多选']
         for q_type_keyword in types_order:
             type_indices = [i for i, t in enumerate(exam_df['题型']) if q_type_keyword in str(t)]
-
+            
             if type_indices:
                 st.sidebar.subheader(f"【{q_type_keyword}题】")
                 cols_per_row = 5
@@ -382,37 +347,30 @@ elif app_mode == "📝 自我检测 (100题)":
                     for j in range(cols_per_row):
                         if i + j < len(type_indices):
                             real_idx = type_indices[i + j]
-
-                            # 1. 判断并分配状态符号
-                            btn_label = f"⚪ {real_idx + 1}"  # 默认：未答
-
+                            
+                            # 1. 动态配给Emoji红绿灯状态符号
+                            btn_label = f"⚪ {real_idx + 1}"
+                            
                             if st.session_state.exam_state == 'testing':
-                                # 考试中：答过了就是绿灯
-                                if real_idx in st.session_state.exam_answers and st.session_state.exam_answers[
-                                    real_idx] != "":
+                                if real_idx in st.session_state.exam_answers and st.session_state.exam_answers[real_idx] != "":
                                     btn_label = f"🟢 {real_idx + 1}"
                             elif st.session_state.exam_state == 'finished':
-                                # 交卷后：核对答案亮红绿灯
                                 user_ans = st.session_state.exam_answers.get(real_idx, "")
                                 real_ans = exam_df.iloc[real_idx]['统一正确答案']
                                 if user_ans == real_ans:
                                     btn_label = f"🟢 {real_idx + 1}"
                                 else:
                                     btn_label = f"🔴 {real_idx + 1}"
-
-                            # 2. 当前焦点题号高亮
+                                    
+                            # 2. 焦点选中题号高亮底色
                             is_current = (real_idx == st.session_state.exam_idx)
                             b_type = "primary" if is_current else "secondary"
-
-                            # 定义回调函数：点击时直接在内存中修改题号，避免 st.rerun() 的双重运行
-                            def jump_to_q(target_idx):
-                                st.session_state.exam_idx = target_idx
-
-                            # 将回调函数绑定到按钮上
-                            cols[j].button(btn_label, key=f"exam_btn_{real_idx}", type=b_type, use_container_width=True, on_click=jump_to_q, args=(real_idx,))
+                            
+                            # 绑定回调提升响应速度
+                            cols[j].button(btn_label, key=f"exam_btn_{real_idx}", type=b_type, use_container_width=True, on_click=jump_to_exam_q, args=(real_idx,))
 
         # ------------------------------------------
-        # 主界面：题干与选项渲染
+        # 主界面：题干与表单输入框渲染
         # ------------------------------------------
         question_html = f"""
         <div style='font-size: 1.05em; line-height: 1.6; margin-bottom: 15px; margin-top: 20px;'>
@@ -420,22 +378,22 @@ elif app_mode == "📝 自我检测 (100题)":
         </div>
         """
         st.markdown(question_html, unsafe_allow_html=True)
-
+        
         user_ans_str = st.session_state.exam_answers.get(curr_idx, "")
         correct_ans = row.get('统一正确答案', '')
 
         st.write("请选择你的答案：")
         current_selection = ""
-        disabled_input = (st.session_state.exam_state == 'finished')  # 交卷后锁死输入框
-
-        # 渲染：判断题组件
+        disabled_input = (st.session_state.exam_state == 'finished') 
+        
+        # 分支组件 1：判断题单选框
         if "判断" in q_type:
             opts = ['A. 正确', 'B. 错误']
             def_idx = 0 if user_ans_str == 'A' else 1 if user_ans_str == 'B' else None
             ans = st.radio("选项", opts, index=def_idx, disabled=disabled_input, label_visibility="collapsed")
             if ans: current_selection = ans[0]
 
-        # 渲染：单选题组件
+        # 分支组件 2：常规单选题单选框
         elif "单选" in q_type:
             opts = []
             for opt in ['A', 'B', 'C', 'D']:
@@ -449,7 +407,7 @@ elif app_mode == "📝 自我检测 (100题)":
             ans = st.radio("选项", opts, index=def_idx, disabled=disabled_input, label_visibility="collapsed")
             if ans: current_selection = ans[0]
 
-        # 渲染：多选题组件
+        # 分支组件 3：多选题复选框
         else:
             selected_list = []
             for opt in ['A', 'B', 'C', 'D', 'E', 'F']:
@@ -459,15 +417,15 @@ elif app_mode == "📝 自我检测 (100题)":
                     if st.checkbox(f"{opt}. {val}", value=is_checked, disabled=disabled_input):
                         selected_list.append(opt)
             current_selection = ",".join(selected_list)
-
-        # 记录答案
+        
+        # 实时归档记录用户作答
         if st.session_state.exam_state == 'testing':
             st.session_state.exam_answers[curr_idx] = current_selection
 
         st.write("---")
-
+        
         # ------------------------------------------
-        # 交卷后的解析与答案反馈模块
+        # 判分完毕后的答案反馈与解析展示区
         # ------------------------------------------
         if st.session_state.exam_state == 'finished':
             if user_ans_str == correct_ans:
@@ -481,54 +439,48 @@ elif app_mode == "📝 自我检测 (100题)":
             st.write("---")
 
         # ------------------------------------------
-        # 底部控制区：翻页与交卷逻辑
+        # 底部控制区：上一题、下一题、交卷控制逻辑（回调提速版）
         # ------------------------------------------
-        col1, col2, col3 = st.columns([1, 1, 1])
-
-        # 定义回调函数
-        def go_prev():
+        def go_exam_prev():
             if st.session_state.exam_idx > 0:
                 st.session_state.exam_idx -= 1
 
-        def go_next():
+        def go_exam_next():
             if st.session_state.exam_idx < total_exam_q - 1:
                 st.session_state.exam_idx += 1
 
+        col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
-            # 绑定回调函数
-            st.button("⬅️ 上一题", use_container_width=True, on_click=go_prev)
-
+            st.button("⬅️ 上一题", use_container_width=True, on_click=go_exam_prev)
         with col2:
-            # 绑定回调函数
-            st.button("下一题 ➡️", use_container_width=True, on_click=go_next)
-
+            st.button("下一题 ➡️", use_container_width=True, on_click=go_exam_next)
+                    
         with col3:
             if st.session_state.exam_state == 'testing':
                 if st.button("🚨 交卷并查看成绩", type="primary", use_container_width=True):
-
-                    # 1. 统计真实作答数，判断是否触发拦截弹窗
+                    
+                    # 判别是否有未做的空题
                     answered_count = sum(1 for v in st.session_state.exam_answers.values() if v.strip() != "")
                     unanswered_count = total_exam_q - answered_count
-
+                    
                     if unanswered_count > 0:
                         confirm_submit_dialog(unanswered_count, total_exam_q)
                     else:
-                        # 全做完了，直接出分
                         score = 0
                         for i in range(total_exam_q):
                             user_ans = st.session_state.exam_answers.get(i, "")
                             real_ans = st.session_state.exam_df.iloc[i]['统一正确答案']
                             if user_ans == real_ans:
                                 score += 1
-
+                        
                         st.session_state.exam_score = score
                         st.session_state.exam_state = 'finished'
                         st.session_state.exam_idx = 0
                         st.session_state.show_result_popup = True
                         st.rerun()
-
+                        
             elif st.session_state.exam_state == 'finished':
                 if st.button("🔄 重新开始新考试", use_container_width=True):
                     st.session_state.exam_state = 'not_started'
-                    st.session_state.show_result_popup = False
+                    st.session_state.show_result_popup = False 
                     st.rerun()
