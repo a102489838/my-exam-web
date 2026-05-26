@@ -138,7 +138,7 @@ if total_questions > 0:
         f"📋 当前题型：【{selected_type}】 | 进度: {st.session_state.current_index + 1} / {total_questions}  |  本题实际类型: {row.get('题型', '未知')}")
 
     # 渲染核心题干文本
-    st.markdown(f"### **{st.session_state.current_index + 1}.** {row.get('题目内容', '')}")
+    st.markdown(f"#### **{st.session_state.current_index + 1}.** {row.get('题目内容', '')}")
     st.write("")
 
     # 获取当前题目的正确答案文本以及题型名称
