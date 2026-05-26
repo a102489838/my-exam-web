@@ -137,9 +137,19 @@ if total_questions > 0:
     st.info(
         f"📋 当前题型：【{selected_type}】 | 进度: {st.session_state.current_index + 1} / {total_questions}  |  本题实际类型: {row.get('题型', '未知')}")
 
+    # ==========================================
+    # 自定义区域：题干排版设置
+    # ==========================================
     # 渲染核心题干文本
-    st.markdown(f"#### **{st.session_state.current_index + 1}.** {row.get('题目内容', '')}")
-    st.write("")
+    # font-size: 1.05em 控制字号大小（比之前略小）
+    # line-height: 1.6 控制行间距，让长题目换行后不挤
+    # margin-bottom: 15px 控制题目和下方选项之间的留白
+    question_html = f"""
+    <div style='font-size: 1.05em; line-height: 1.6; margin-bottom: 15px;'>
+        <b>{st.session_state.current_index + 1}.</b> {row.get('题目内容', '')}
+    </div>
+    """
+    st.markdown(question_html, unsafe_allow_html=True)
 
     # 获取当前题目的正确答案文本以及题型名称
     correct_answers_str = str(row.get('正确答案', ''))
@@ -160,17 +170,25 @@ if total_questions > 0:
 
         # 3. 遍历并利用带有 CSS 属性的 HTML 进行高亮渲染
         for opt, opt_val in options_dict.items():
+            # ------------------------------------------
+            # 模块区域：判断题选项渲染
+            # ------------------------------------------
             if opt in mapped_correct:
+                # 命中正确答案：
+                # 减小 padding (内边距) 让框体变精致
+                # 增大 margin-bottom 到 15px，拉开选项之间的距离
+                # 设定 font-size: 0.95em 缩小字号，line-height: 1.5 增加行距
                 highlight_html = f"""
-                <div style="background-color: #e8f5e9; color: #1b5e20; padding: 10px; border-radius: 5px; margin-bottom: 8px; font-weight: bold; border-left: 5px solid #4caf50;">
+                <div style="background-color: #e8f5e9; color: #1b5e20; padding: 8px 12px; border-radius: 5px; margin-bottom: 15px; font-weight: bold; border-left: 4px solid #4caf50; font-size: 0.95em; line-height: 1.5;">
                     {opt}. {opt_val} ✔️
                 </div>
                 """
                 st.markdown(highlight_html, unsafe_allow_html=True)
             else:
-                st.markdown(
-                    f"<div style='margin-bottom: 6px; padding-left: 10px;'>{opt}. {opt_val}</div>",
-                    unsafe_allow_html=True)
+                # 错误选项：
+                # 增大 margin-bottom 到 15px，拉开选项之间的距离
+                # 缩小 font-size 到 0.95em (原为1.1em)
+                st.markdown(f"<div style='margin-bottom: 15px; padding-left: 15px; font-size: 0.95em; line-height: 1.5;'>{opt}. {opt_val}</div>", unsafe_allow_html=True)
 
     # --- 常规选择题处理逻辑 ---
     else:
